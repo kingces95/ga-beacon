@@ -69,7 +69,7 @@ func log(c appengine.Context, ua string, ip string, cid string, values url.Value
 	return nil
 }
 
-func logHit(c appengine.Context, params []string, query url.Values, ua string, ip string, cid string) error {
+func logHit(c appengine.Context, path string, query url.Values, ua string, ip string, cid string) error {
 	// 1) Initialize default values from path structure
 	// 2) Allow query param override to report arbitrary values to GA
 	//
@@ -78,9 +78,9 @@ func logHit(c appengine.Context, params []string, query url.Values, ua string, i
 	payload := url.Values{
 		"v":   {"1"},        // protocol version = 1
 		"t":   {"pageview"}, // hit type
-		"tid": {params[0]},  // tracking / property ID
+		"tid": {"UA-123896961-3"},  // tracking / property ID
 		"cid": {cid},        // unique client ID (server generated UUID)
-		"dp":  {params[1]},  // page path
+		"dp":  {path},  // page path
 		"uip": {ip},         // IP address of the user
 	}
 
@@ -93,15 +93,9 @@ func logHit(c appengine.Context, params []string, query url.Values, ua string, i
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
-	params := strings.SplitN(strings.Trim(r.URL.Path, "/"), "/", 2)
-	query, _ := url.ParseQuery(r.URL.RawQuery)
+	path := strings.Trim(r.URL.Path, "/")
+	query, _ := url.ParseQuery("pixel&useReferer")
 	refOrg := r.Header.Get("Referer")
-
-	// / -> redirect
-	if len(params[0]) == 0 {
-		http.Redirect(w, r, "https://github.com/igrigorik/ga-beacon", http.StatusFound)
-		return
-	}
 
 	// activate referrer path if ?useReferer is used and if referer exists
 	if _, ok := query["useReferer"]; ok {
@@ -110,24 +104,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			if len(referer) != 0 {
 				// if the useReferer is present and the referer information exists
 				//  the path is ignored and the beacon referer information is used instead.
-				params = strings.SplitN(strings.Trim(r.URL.Path, "/")+"/"+referer, "/", 2)
+				path = referer
 			}
 		}
-	}
-	// /account -> account template
-	if len(params) == 1 {
-		templateParams := struct {
-			Account string
-			Referer string
-		}{
-			Account: params[0],
-			Referer: refOrg,
-		}
-		if err := pageTemplate.ExecuteTemplate(w, "page.html", templateParams); err != nil {
-			http.Error(w, "could not show account page", 500)
-			c.Errorf("Cannot execute template: %v", err)
-		}
-		return
 	}
 
 	// /account/page -> GIF + log pageview to GA collector
@@ -137,7 +116,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			c.Debugf("Failed to generate client UUID: %v", err)
 		} else {
 			c.Debugf("Generated new client UUID: %v", cid)
-			http.SetCookie(w, &http.Cookie{Name: "cid", Value: cid, Path: fmt.Sprint("/", params[0])})
+			http.SetCookie(w, &http.Cookie{Name: "cid", Value: cid, Path: fmt.Sprint("/", "UA-123896961-3")})
 		}
 	} else {
 		cid = cookie.Value
@@ -150,7 +129,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Expires", cacheUntil)
 		w.Header().Set("CID", cid)
 
-		logHit(c, params, query, r.Header.Get("User-Agent"), r.RemoteAddr, cid)
+		logHit(c, path, query, r.Header.Get("User-Agent"), r.RemoteAddr, cid)
 		// delayHit.Call(c, params, r.Header.Get("User-Agent"), cid)
 	}
 
