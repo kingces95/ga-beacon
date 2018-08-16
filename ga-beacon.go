@@ -93,7 +93,7 @@ func logHit(c appengine.Context, path string, query url.Values, ua string, ip st
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
-	path := strings.Trim(r.URL.Path, "/")
+	path := "/" + strings.Trim(r.URL.Path, "/")
 	query, _ := url.ParseQuery("pixel&useReferer")
 	refOrg := r.Header.Get("Referer")
 
